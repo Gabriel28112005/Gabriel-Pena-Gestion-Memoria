@@ -33,7 +33,7 @@ int main() {
     }
 
     return 0;
-}
+    }
 Explicación paso a paso:
 
 Primero, importamos las bibliotecas necesarias para la asignación de memoria y la creación de procesos.
@@ -59,3 +59,67 @@ Si el valor devuelto es 0, significa que estamos en el proceso hijo. En este cas
 Si el valor devuelto por fork() es mayor que 0, significa que estamos en el proceso padre. En este caso, escribimos en la memoria compartida, esperamos a que el proceso hijo termine y luego liberamos la memoria.
 
 Espero que esta explicación te ayude a entender mejor el código. Si tienes más preguntas, no dudes en hacerlas.
+
+# Explicación para solucionar el ejercicio
+El código que se nos proporciona no compila correctamente debido a que usa librerías propias del sistema operativo de Linux mientras que nuestra herramienta de programación, CLion, utiliza una distribución de Windows. Para solucionar este problema debemos reescribir nuestro código, incluyendo las librerías, para que se ejecute correctamente usando librerías propias del sistema operativo Windows, además de instalar la aplicación Ubuntu para que haga el cambio correctamente del Linux al Windows.
+El código reescrito correctamente debería ser el siguiente:
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <windows.h>
+
+#define SIZE 4096
+
+int main() {
+    HANDLE hMapFile;
+    char *shared_memory;
+
+    hMapFile = CreateFileMapping(
+        INVALID_HANDLE_VALUE,    // Use paging file
+        NULL,                    // Default security
+        PAGE_READWRITE,          // Read/write access
+        0,                       // Maximum object size (high-order DWORD)
+        SIZE,                    // Maximum object size (low-order DWORD)
+        "SharedMemory");         // Name of mapping object
+
+    if (hMapFile == NULL) {
+        printf("Could not create file mapping object (%d).\n", GetLastError());
+        return 1;
+    }
+
+    shared_memory = (char *)MapViewOfFile(hMapFile,   // Handle to map object
+                                          FILE_MAP_ALL_ACCESS, // Read/write permission
+                                          0,
+                                          0,
+                                          SIZE);
+
+    if (shared_memory == NULL) {
+        printf("Could not map view of file (%d).\n", GetLastError());
+        CloseHandle(hMapFile);
+        return 1;
+    }
+
+    STARTUPINFO si = { sizeof(si) };
+    PROCESS_INFORMATION pi;
+
+    if (CreateProcess(NULL, "child_process.exe", NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi)) {
+        // Parent process
+        strcpy(shared_memory, "Hello, child process!");
+        WaitForSingleObject(pi.hProcess, INFINITE);
+        UnmapViewOfFile(shared_memory);
+        CloseHandle(hMapFile);
+        CloseHandle(pi.hProcess);
+        CloseHandle(pi.hThread);
+    } else {
+        // Child process
+        printf("Child reads: %s\n", shared_memory);
+        UnmapViewOfFile(shared_memory);
+        CloseHandle(hMapFile);
+        exit(0);
+    }
+
+    return 0;
+    }
+
+Una vez realizado hecho, el código debería de compilarse y ejecutarse sin problema alguno, devolviendo "Hello, child process!" si tenemos memoria ocupada o, de lo contrario, "Child reads".
